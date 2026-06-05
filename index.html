@@ -534,18 +534,18 @@ function dpDayBtn(ds,label,today,rs,re,other){
 
 // ---- SELEÇÃO DE DIAS ----
 function dpClick(ds){
+  // phase 0 = nada selecionado OU range já completo (recomeça)
+  // phase 1 = início escolhido, aguardando o fim
   if(DP.phase===0){
-    // Primeiro clique: define início
-    DP.ps=ds; DP.pe=ds; DP.phase=1; DP.hover=null
-    dpRenderCals(); dpUpdateApplyBtn(); dpUpdateHint()
+    // Primeiro clique: define a DATA DE INÍCIO
+    DP.ps=ds; DP.pe=ds; DP.phase=1; DP.hover=null; DP.sc=null
   }else{
-    // Segundo clique: define fim e confirma automaticamente (igual Meta)
+    // Segundo clique: define a DATA DE FIM (range completo)
     if(ds<DP.ps){DP.pe=DP.ps;DP.ps=ds}else{DP.pe=ds}
-    DP.phase=0; DP.hover=null
-    // Aplica imediatamente ao confirmar o segundo clique
-    DP.start=DP.ps; DP.end=DP.pe; DP.sc=null
-    dpUpdateBtn(); dpClose(); applyAll()
+    DP.phase=0; DP.hover=null; DP.sc=null
   }
+  // NÃO fecha nem aplica — usuário confirma clicando em "Atualizar"
+  dpRenderCals(); dpUpdateApplyBtn(); dpUpdateHint(); dpMarkSc()
 }
 function dpHover(ds){
   if(DP.phase!==1)return
@@ -564,11 +564,14 @@ function dpUpdateBtn(){
   el.textContent=s===e?s:s+' – '+e
 }
 function dpUpdateApplyBtn(){
-  document.getElementById('dpApply').disabled=DP.phase===1
+  // Botão habilitado sempre que houver início e fim definidos (mesmo 1 dia)
+  document.getElementById('dpApply').disabled=!(DP.ps&&DP.pe)
 }
 function dpUpdateHint(){
   const h=document.getElementById('dpHint')
-  h.textContent=DP.phase===1?'Clique para definir a data final':''
+  if(DP.phase===1)h.textContent='Clique na data final'
+  else if(DP.ps&&DP.pe&&DP.ps!==DP.pe)h.textContent=''
+  else h.textContent=''
 }
 function dpMarkSc(){
   document.querySelectorAll('.dp-sc').forEach(b=>b.classList.remove('dp-sc-active'))
