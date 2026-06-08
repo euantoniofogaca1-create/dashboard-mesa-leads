@@ -384,6 +384,38 @@ function effStatus(l){if(l.status==='convertido')return'convertido';if(isMQL(l))
 function applyDerivedStatus(leads){leads.forEach(l=>{l.status=effStatus(l)})}
 
 // ============================================================
+// NORMALIZAÇÃO utm_content → adset_name
+// ============================================================
+function normalizeUtmContent(leads,adsetNames){
+  const lookup={};
+  adsetNames.forEach(name=>{
+    lookup[name]=name;
+    const pfx=name.split(/\s*[-–]\s*/)[0].trim();
+    if(pfx&&!lookup[pfx]) lookup[pfx]=name;
+    lookup[name.toLowerCase()]=name;
+    if(pfx) lookup[pfx.toLowerCase()]=name;
+  });
+  let matched=0,unmatched=0;const unmatchedVals=new Set();
+  leads.forEach(l=>{
+    if(!l.utm_content)return;
+    const v=l.utm_content.trim();
+    if(lookup[v]){l.utm_content=lookup[v];matched++}
+    else if(lookup[v.toLowerCase()]){l.utm_content=lookup[v.toLowerCase()];matched++}
+    else{
+      // tenta match parcial: utm_content contido em algum adset_name
+      const partial=adsetNames.find(n=>n.toLowerCase().includes(v.toLowerCase()));
+      if(partial){l.utm_content=partial;matched++}
+      else{unmatched++;unmatchedVals.add(v)}
+    }
+  });
+  console.log('[UTM→Adset] matched:',matched,'unmatched:',unmatched);
+  if(unmatchedVals.size)console.log('[UTM→Adset] valores sem match:',Array.from(unmatchedVals));
+  if(adsetNames.length)console.log('[UTM→Adset] adset_names:',adsetNames);
+  const utmVals=[...new Set(leads.map(l=>l.utm_content).filter(Boolean))];
+  console.log('[UTM→Adset] utm_content únicos (após normalização):',utmVals);
+}
+
+// ============================================================
 // DEMO DATA
 // ============================================================
 const ADSETS=['00 - [BR] [35-55]','01 - [BR] [35-55]','04 - [BR] [35-55]']
@@ -558,12 +590,13 @@ function sortBy(c){if(S.sortCol===c)S.sortDir=S.sortDir==='asc'?'desc':'asc';els
 function popAdset(){const s=document.getElementById('fAdset');const a=[...new Set(allMet.map(m=>m.adset_name))].sort();s.innerHTML='<option value="all">Todos</option>'+a.map(x=>`<option value="${x}">${x}</option>`).join('')}
 function exportCSV(){const h=['Data','Nome','Email','Telefone','Faturamento','Funcionários','Campanha','Conjunto','Status'];const rows=fLeads.map(l=>[fdate(l.criado_em),l.nome||'',l.email||'',l.telefone||'',l.faturamento||'',l.funcionarios||'',l.utm_campaign||'',l.utm_content||'',l.status||'']);const csv=[h,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');const b=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=`leads-${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(u);toast('CSV exportado com sucesso')}
 function showConnError(show){const c=document.getElementById('connAlert');if(c)c.classList.toggle('show',!!show)}
-function loadDemo(){allMet=DEMO_METRICAS;allLeads=DEMO_LEADS;applyDerivedStatus(allLeads);showConnError(false);popAdset();computeAdsetStatus();applyAll();document.getElementById('lastUpdate').textContent='exemplo';toast('Exibindo dados de exemplo')}
+function loadDemo(){allMet=DEMO_METRICAS;allLeads=DEMO_LEADS;const adsetNames=[...new Set(allMet.map(r=>r.adset_name))];normalizeUtmContent(allLeads,adsetNames);applyDerivedStatus(allLeads);showConnError(false);popAdset();computeAdsetStatus();applyAll();document.getElementById('lastUpdate').textContent='exemplo';toast('Exibindo dados de exemplo')}
 async function loadAll(){
   document.getElementById('lastUpdate').textContent='sincronizando...'
   try{
     if(DEMO_MODE){allMet=DEMO_METRICAS;allLeads=DEMO_LEADS}
     else{const[m,l]=await Promise.all([query('metricas_meta','order=data.desc&limit=2000'),query('leads','order=criado_em.desc&limit=2000')]);allMet=m;allLeads=l}
+    const adsetNames=[...new Set(allMet.map(r=>r.adset_name))];normalizeUtmContent(allLeads,adsetNames)
     applyDerivedStatus(allLeads);showConnError(false);popAdset();computeAdsetStatus();applyAll()
     document.getElementById('lastUpdate').textContent=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:TZ})
   }catch(e){
