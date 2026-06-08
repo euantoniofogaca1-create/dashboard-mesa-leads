@@ -387,32 +387,34 @@ function applyDerivedStatus(leads){leads.forEach(l=>{l.status=effStatus(l)})}
 // NORMALIZAÇÃO utm_content → adset_name
 // ============================================================
 function normalizeUtmContent(leads,adsetNames){
-  const lookup={};
+  if(!leads.length||!adsetNames.length)return;
+  // Mapeamento: número do AD → adset_name
+  // Ex: "AD4 - A MESA - IMG - 35/55" → extrair 4 → pad "04" → encontrar "04 - [BR] [35-55]"
+  const byNum={};
   adsetNames.forEach(name=>{
-    lookup[name]=name;
-    const pfx=name.split(/\s*[-–]\s*/)[0].trim();
-    if(pfx&&!lookup[pfx]) lookup[pfx]=name;
-    lookup[name.toLowerCase()]=name;
-    if(pfx) lookup[pfx.toLowerCase()]=name;
+    const m=name.match(/^(\d+)/);
+    if(m) byNum[m[1]]=name;
   });
   let matched=0,unmatched=0;const unmatchedVals=new Set();
   leads.forEach(l=>{
     if(!l.utm_content)return;
-    const v=l.utm_content.trim();
-    if(lookup[v]){l.utm_content=lookup[v];matched++}
-    else if(lookup[v.toLowerCase()]){l.utm_content=lookup[v.toLowerCase()];matched++}
-    else{
-      // tenta match parcial: utm_content contido em algum adset_name
-      const partial=adsetNames.find(n=>n.toLowerCase().includes(v.toLowerCase()));
-      if(partial){l.utm_content=partial;matched++}
+    const v=String(l.utm_content).trim();
+    // Extrair número do AD: "AD11 - ..." → "11", "AD4 - ..." → "4"
+    const adMatch=v.match(/^AD\s*(\d+)/i);
+    if(adMatch){
+      const num=adMatch[1];
+      const padded=num.padStart(2,'0');
+      // Tentar com e sem zero à esquerda
+      const target=byNum[padded]||byNum[num];
+      if(target){l.utm_content=target;matched++}
       else{unmatched++;unmatchedVals.add(v)}
+    }else{
+      // Valor sem padrão AD (ex: "{{ad.name}}") — ignorar
+      unmatched++;unmatchedVals.add(v);
     }
   });
   console.log('[UTM→Adset] matched:',matched,'unmatched:',unmatched);
-  if(unmatchedVals.size)console.log('[UTM→Adset] valores sem match:',Array.from(unmatchedVals));
-  if(adsetNames.length)console.log('[UTM→Adset] adset_names:',adsetNames);
-  const utmVals=[...new Set(leads.map(l=>l.utm_content).filter(Boolean))];
-  console.log('[UTM→Adset] utm_content únicos (após normalização):',utmVals);
+  if(unmatchedVals.size)console.log('[UTM→Adset] sem match:',Array.from(unmatchedVals).join(' | '));
 }
 
 // ============================================================
